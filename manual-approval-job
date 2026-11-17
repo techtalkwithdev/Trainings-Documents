@@ -1,0 +1,59 @@
+pipeline {
+    agent none
+
+    stages {
+        stage('Build & Test') {
+            agent { label 'maven' }
+            steps {
+                git branch: 'main', url: 'https://github.com/techtalkwithdev/Sample-applications.git'
+                sh 'mvn -B clean package'
+                stash name: 'app-jar', includes: 'target/sample-app.jar'
+            }
+        }
+
+        stage('Deploy to QA') {
+            agent { label 'maven' }
+            steps {
+                unstash 'app-jar'
+                echo "Deploying build ${env.BUILD_NUMBER} to QA"
+                sh 'ls -l target/sample-app.jar'
+            }
+        }
+
+        stage('Approval') {
+            steps {
+                timeout(time: 10, unit: 'MINUTES') {
+                    script {
+                        def approval = input(
+                            message: "Deploy build ${env.BUILD_NUMBER} to PRODUCTION?",
+                            ok: 'Approve',
+                            submitter: 'dev',
+                            submitterParameter: 'APPROVED_BY',
+                            parameters: [
+                                string(name: 'COMMENT', defaultValue: '', description: 'Reason / change ticket')
+                            ]
+                        )
+                        env.APPROVED_BY = approval.APPROVED_BY
+                        env.APPROVAL_COMMENT = approval.COMMENT
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to Prod') {
+            agent { label 'maven' }
+            steps {
+                unstash 'app-jar'
+                echo "Approved by : ${env.APPROVED_BY}"
+                echo "Comment     : ${env.APPROVAL_COMMENT}"
+                echo "Deploying build ${env.BUILD_NUMBER} to PRODUCTION"
+            }
+        }
+    }
+
+    post {
+        success { echo "Build ${env.BUILD_NUMBER} deployed to production" }
+        aborted { echo "Deployment rejected or approval timed out" }
+        failure { echo "Build ${env.BUILD_NUMBER} failed" }
+    }
+}
