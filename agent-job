@@ -1,0 +1,26 @@
+pipeline {
+    agent { label 'maven' }
+
+    stages {
+        stage('Where am I') {
+            steps {
+                sh 'hostname && whoami && pwd'
+            }
+        }
+        stage('Checkout') {
+            steps {
+                git branch: 'main', url: 'https://github.com/techtalkwithdev/Sample-applications.git'
+            }
+        }
+        stage('Build') {
+            steps {
+                sh 'mvn -B clean package'
+            }
+        }
+        stage('Archive') {
+            steps {
+                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+            }
+        }
+    }
+}
