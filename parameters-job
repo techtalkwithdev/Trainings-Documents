@@ -1,0 +1,71 @@
+pipeline {
+    agent { label 'maven' }
+
+    parameters {
+        string(name: 'BRANCH', defaultValue: 'main', description: 'Git branch to build')
+        choice(name: 'ENVIRONMENT', choices: ['dev', 'qa', 'prod'], description: 'Target environment')
+        booleanParam(name: 'RUN_TESTS', defaultValue: true, description: 'Run unit tests?')
+        string(name: 'APP_VERSION', defaultValue: '1.0.0', description: 'Version to tag this build')
+        text(name: 'RELEASE_NOTES', defaultValue: 'Bug fixes and improvements', description: 'Release notes (multi-line)')
+    }
+
+    stages {
+        stage('Show Parameters') {
+            steps {
+                echo "Branch       : ${params.BRANCH}"
+                echo "Environment  : ${params.ENVIRONMENT}"
+                echo "Run tests    : ${params.RUN_TESTS}"
+                echo "App version  : ${params.APP_VERSION}"
+                echo "Release notes: ${params.RELEASE_NOTES}"
+            }
+        }
+
+        stage('Checkout') {
+            steps {
+                git branch: "${params.BRANCH}", url: 'https://github.com/techtalkwithdev/Sample-applications.git'
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh 'mvn -B clean package -DskipTests'
+            }
+        }
+
+        stage('Test') {
+            when {
+                expression { params.RUN_TESTS }
+            }
+            steps {
+                sh 'mvn -B test'
+            }
+        }
+
+        stage('Approval for Prod') {
+            when {
+                expression { params.ENVIRONMENT == 'prod' }
+            }
+            steps {
+                input message: "Deploy version ${params.APP_VERSION} to PRODUCTION?", ok: 'Deploy'
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                echo "Deploying ${env.JOB_NAME} v${params.APP_VERSION} to ${params.ENVIRONMENT}"
+                sh "cp target/sample-app.jar target/sample-app-${params.APP_VERSION}-${params.ENVIRONMENT}.jar"
+                sh "ls -l target/*.jar"
+            }
+        }
+    }
+
+    post {
+        success {
+            archiveArtifacts artifacts: "target/sample-app-${params.APP_VERSION}-${params.ENVIRONMENT}.jar", fingerprint: true
+            echo "Build ${env.BUILD_NUMBER}: v${params.APP_VERSION} ready for ${params.ENVIRONMENT}"
+        }
+        failure {
+            echo "Build ${env.BUILD_NUMBER} failed"
+        }
+    }
+}
