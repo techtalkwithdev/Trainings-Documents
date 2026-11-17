@@ -1,0 +1,10 @@
+node {
+    try {
+        stage('Build') {
+            echo 'Building...'
+        }
+    } catch (err) {
+        echo 'Build failed'
+        throw err
+    }
+}
